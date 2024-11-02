@@ -1,0 +1,119 @@
+plugins {
+  java
+}
+
+sourceSets {
+  main {
+    java.srcDirs("src/main/java")
+  }
+  test {
+    java.srcDirs("src/test/java")
+  }
+}
+
+/*
+Setup environment variables
+* stsInstallLocation should point to the Steam install directory
+* modTheSpireLocation should point to the ModTheSpire.jar file
+* baseModLocation should point to the BaseMod.jar file
+* stsJar should point to the desktop-1.0.jar file (STS game jar)
+
+* Strongly recommend:
+* - Using VSCode gradle extension for this
+* - Use absolute paths
+* - Copy or use the jars directly from where they were downloaded off of the Steam Workshop - not the release version on each GitHub
+
+* Debugging:
+* - If encountering import issues run the checkDependencyFiles task and see if the jars are actually being included
+ */
+
+var steamappsLocation: String = ""
+// like `Steam/steamapps/common/SlayTheSpire`
+var stsInstallLocation: String = ""
+
+var workshopLocation: String = "$steamappsLocation/workshop/content/646570"
+
+var modTheSpireLocation: String = "$workshopLocation/1605060445/ModTheSpire.jar"
+var baseModLocation: String = "$workshopLocation/1605833019/BaseMod.jar"
+var stsJar: String = "$stsInstallLocation/desktop-1.0.jar"
+
+repositories {
+  mavenCentral()
+}
+
+dependencies {
+  compileOnly(files(modTheSpireLocation, baseModLocation, stsJar))
+  testImplementation(files(modTheSpireLocation, baseModLocation, stsJar))
+
+  implementation("com.badlogicgames.gdx:gdx:1.12.0")
+  implementation("com.badlogicgames.gdx:gdx-backend-headless:1.12.0")
+  implementation("com.badlogicgames.gdx:gdx-platform:1.12.0:natives-desktop") // needed for headless backend
+
+  implementation("org.mockito:mockito-core:5.5.0")
+
+  testImplementation("org.junit.jupiter:junit-jupiter:5.10.0")
+}
+
+tasks.register("srcsets") {
+  doLast {
+    sourceSets.forEach { srcSet ->
+      println(srcSet.name)
+      println(srcSet.allJava.srcDirs)
+    }
+  }
+}
+
+// --------------------------------------------------------------------------------
+
+configure<JavaPluginExtension> {
+  sourceCompatibility = JavaVersion.VERSION_1_8
+  targetCompatibility = JavaVersion.VERSION_1_8
+}
+
+tasks.register<Jar>("buildJAR") {
+  group = "Mock the Spire"
+  description = "Builds a fat (includes runtime dependencies) JAR in the build/libs folder"
+
+  duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+
+  // Main code
+  from(sourceSets.main.get().output)
+
+  // Any runtime dependencies (e.g. from mavenCentral(), local JARs, etc.)
+  dependsOn(configurations.runtimeClasspath)
+  from({
+    configurations.runtimeClasspath.get().filter {
+      it.name.endsWith("jar")
+    }.map {
+      zipTree(it)
+    }
+  })
+}
+
+tasks.withType<Test> {
+  useJUnitPlatform()
+  testLogging {
+    events("passed", "skipped", "failed")
+    exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL
+    showExceptions = true
+    showCauses = true
+    showStackTraces = true
+    showStandardStreams = true
+  }
+
+  classpath = sourceSets.test.get().runtimeClasspath
+}
+
+tasks.register("checkDependencyFiles") {
+  doLast {
+    val files = listOf(modTheSpireLocation, baseModLocation, stsJar)
+    files.forEach { path ->
+      val file = File(path)
+      if (file.exists()) {
+        println("Found: $path")
+      } else {
+        println("Not found: $path")
+      }
+    }
+  }
+}
